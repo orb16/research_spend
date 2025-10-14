@@ -37,20 +37,36 @@ matching <- tribble(~new, ~Socio.economic.objectives,
 
 # It looks like most country data comes from 2021, but some countries did not report in 2021, and therefore I assume
 # that the most recent "complete" data were used
-# here we take the most recent year (if not 2021) for which 5 or fewer indicators were NA
-# NB I can't figure out which year they were using for Latvia
+# here we take the most recent year (if not 2021) for which 3 or 
+# more indicators were present (sumNAs > 3; NB naming misinformative), 
+# note that an indicator will be counted if zero spend (because not NA), hence Latvia
+# NB I can't figure out which year they were using for Latvia, South Africa, Lithuania
 
-mostRecent <- tab %>%
-  filter(TIME_PERIOD < 2022) %>%
-  group_by(Reference.area, TIME_PERIOD, Socio.economic.objectives, isPres = is.na(OBS_VALUE)) %>% summarise()  %>%
-  group_by(Reference.area, TIME_PERIOD) %>%
-  summarise(sumNAs = sum(isPres)) %>%
-  filter(! sumNAs > 5)%>%
-  dplyr::select(Reference.area, TIME_PERIOD) %>%
-  group_by(Reference.area) %>%
-  arrange(desc(TIME_PERIOD)) %>%
-  slice(1) %>%
-  data.frame(.)
+
+getRecents <- function(data, period = NULL){
+  if(!is.null(period)){
+    setup <- data %>% 
+      filter(TIME_PERIOD < period) 
+  } else {
+    setup <- data
+  }
+  
+  ret <- setup %>% 
+    group_by(Reference.area, TIME_PERIOD, Socio.economic.objectives, isPres = !is.na(OBS_VALUE)) %>% summarise()  %>%
+    group_by(Reference.area, TIME_PERIOD) %>%
+    summarise(sumNAs = sum(isPres)) %>%
+    filter(sumNAs > 3)%>%
+    dplyr::select(Reference.area, TIME_PERIOD) %>%
+    group_by(Reference.area) %>%
+    arrange(desc(TIME_PERIOD)) %>%
+    slice(1) %>%
+    data.frame(.)
+  return(ret)
+  
+}
+
+
+mostRecent <- getRecents(tab, period = 2022)
 
 
 # get the "total" spend. This controls for teh fact that some spend is not reported as "confidential" - 
@@ -76,41 +92,50 @@ short <- tab %>% filter(!Socio.economic.objectives == "Total") %>%
   left_join(., total) %>%
   mutate(percentTotal = (100 * sumObs) / totalSpent)
 
+# ordered countries 
+ourCountries <- c("New Zealand", "Switzerland", "Ireland", "Israel", "Latvia", "Colombia", "Argentina", 
+                  "Romania", "Slovak Republic", "Portugal", 
+                  "Poland", "South Africa", "Lithuania", "Luxembourg", 
+                  "Türkiye", "Spain", "Italy", "Japan", "Chinese Taipei", "Korea", "Greece", "Estonia", "Hungary", 
+                  "Germany", "Russia", "Austria", "France", "Sweden", "Denmark")
+
+ourTypes <- c("Environment", "Agriculture", "Industrial production and technology", "Health", "Energy", "Defence", "Exploitation of the Earth",
+              "Exploitation of space", "Other")
+
+# matched to our types, hex codes obtained from report
+ourCols <- c(
+  "#00B050",
+  "#92D050",
+  "#FFC000",
+  "#00B0F0",
+  "#FFFF00",
+  "#FF9999",
+  "#C00000",
+  "#0070C0",
+  "#BFBFBF"
+)
+
 # factor with same levels as original Figure 3
-short$new2 <- factor(short$new, levels = rev(c("Environment", "Agriculture", "Industrial production and technology", "Health", "Energy", "Defence", "Exploitation of the Earth",
-                                           "Exploitation of space", "Other")))
+short$new2 <- factor(short$new, levels = rev(ourTypes))
 
 # bar width to match figure
 bar_width = .8
+
 orig <- ggplot(data = short, aes(x = Reference.area, y = percentTotal)) + 
   geom_bar(aes(fill = new2), 
            stat = "identity",
            position=position_stack(), width = bar_width) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   scale_fill_manual(
-    limits = c("Environment", "Agriculture", "Industrial production and technology", "Health", "Energy", "Defence", "Exploitation of the Earth",
-               "Exploitation of space", "Other"),
-    values = c(
-      "#00B050",
-      "#92D050",
-      "#FFC000",
-      "#00B0F0",
-      "#FFFF00",
-      "#FF9999",
-      "#C00000",
-      "#0070C0",
-      "#BFBFBF"
-    )
+    limits = ourTypes,
+    values = ourCols
   ) + 
-  scale_x_discrete(limits = c("New Zealand", "Switzerland", "Ireland", "Israel", "Latvia", "Colombia", "Argentina", 
-                              "Romania", "Slovak Republic", "Portugal", 
-                              "Poland", "South Africa", "Lithuania",
-                              "Türkiye", "Spain", "Italy", "Japan", "Chinese Taipei", "Korea", "Greece", "Estonia", "Hungary", 
-                              "Germany", "Russia", "Austria", "France", "Sweden", "Denmark")) + 
+  scale_x_discrete(limits = ourCountries) + 
   labs(x = "Country", y = "Percentage of GOVRED") +
   ggtitle(paste("Percentage of government expenditure on R&D\nper socio-economic area, as at", "~2021")) +
+  theme_minimal()+
   theme(panel.grid.minor.x =  element_blank(),
         panel.grid.major.x =  element_blank()) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   scale_y_continuous(breaks = seq(from = 0, to = 100, by = 10), expand = c(0,0)) +
   labs(fill = "")
 orig
@@ -118,17 +143,8 @@ orig
 
 # now we do the same thing, but for the most recent data
 # here, getting anything from 2023, but dropping back to less recent years if needed
-mostRecent2 <- tab %>%
-  # filter(TIME_PERIOD < 2022) %>%
-  group_by(Reference.area, TIME_PERIOD, Socio.economic.objectives, isPres = is.na(OBS_VALUE)) %>% summarise()  %>%
-  group_by(Reference.area, TIME_PERIOD) %>%
-  summarise(sumNAs = sum(isPres)) %>%
-  filter(! sumNAs > 5)%>%
-  dplyr::select(Reference.area, TIME_PERIOD) %>%
-  group_by(Reference.area) %>%
-  arrange(desc(TIME_PERIOD)) %>%
-  slice(1) %>%
-  data.frame(.)
+
+mostRecent2 <- getRecents(tab)
 
 # calculate totals for 'most recent'
 total2 <- tab %>% 
@@ -152,37 +168,22 @@ short2 <- tab %>% filter(!Socio.economic.objectives == "Total") %>%
   mutate(percentTotal = (100 * sumObs) / totalSpent)
 
 
-short2$new2 <- factor(short2$new, levels = rev(c("Environment", "Agriculture", "Industrial production and technology", "Health", "Energy", "Defence", "Exploitation of the Earth",
-                                               "Exploitation of space", "Other")))
+short2$new2 <- factor(short2$new, levels = rev(ourTypes))
 updated <- ggplot(data = short2, aes(x = Reference.area, y = percentTotal)) + 
   geom_bar(aes(fill = new2), 
            stat = "identity",
            position=position_stack(), width = bar_width) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   scale_fill_manual(
-    limits = c("Environment", "Agriculture", "Industrial production and technology", "Health", "Energy", "Defence", "Exploitation of the Earth",
-               "Exploitation of space", "Other"),
-    values = c(
-      "#00B050",
-      "#92D050",
-      "#FFC000",
-      "#00B0F0",
-      "#FFFF00",
-      "#FF9999",
-      "#C00000",
-      "#0070C0",
-      "#BFBFBF"
-    )
+    limits = ourTypes,
+    values = ourCols
   ) + 
-  scale_x_discrete(limits = c("New Zealand", "Switzerland", "Ireland", "Israel", "Latvia", "Colombia", "Argentina", 
-                              "Romania", "Slovak Republic", "Portugal", 
-                              "Poland", "South Africa", "Lithuania",
-                              "Türkiye", "Spain", "Italy", "Japan", "Chinese Taipei", "Korea", "Greece", "Estonia", "Hungary", 
-                              "Germany", "Russia", "Austria", "France", "Sweden", "Denmark")) + 
+  scale_x_discrete(limits = ourCountries) + 
   labs(x = "Country", y = "Percentage of GOVRED") +
   ggtitle(paste("Percentage of government expenditure on R&D\nper socio-economic area, as at", "most recent measure (~2023)")) +
+  theme_minimal() + 
   theme(panel.grid.minor.x =  element_blank(),
         panel.grid.major.x =  element_blank()) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   scale_y_continuous(breaks = seq(from = 0, to = 100, by = 10), expand = c(0,0)) +
   labs(fill = "")
 
@@ -224,6 +225,7 @@ nzPlot <- ggplot(short3 %>% filter(new %in% c("Agriculture", "Environment")),
                  aes(x = TIME_PERIOD, y = percentTotal)) +
   geom_line(aes(colour = new, linetype = new)) +
   geom_point(aes(colour = new)) +
+  theme_minimal()  +
   theme(legend.position = "bottom") + 
   scale_colour_manual("", values = c("black", "grey50")) +
   scale_linetype_manual("", values = c("dashed", "solid")) +
@@ -242,11 +244,12 @@ nzPlot_raw <- ggplot(tab %>% filter(Socio.economic.objectives %in% c("Agricultur
                  aes(x = TIME_PERIOD, y = OBS_VALUE)) +
   geom_line(aes(colour = Socio.economic.objectives, linetype = Socio.economic.objectives)) +
   geom_point(aes(colour = Socio.economic.objectives)) +
+  theme_minimal()  +
   theme(legend.position = "bottom") + 
   scale_colour_manual("", values = c("black", "grey50")) +
   scale_linetype_manual("", values = c("dashed", "solid")) +
   labs(x = "Year", y = "Spend (millions)",
-       title = "Percentage of government expenditure on R&D:\nagriculture and environment over time")
+       title = "Government expenditure on R&D:\nagriculture and environment over time") 
 
 nzPlot_raw
 
