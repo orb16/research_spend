@@ -71,7 +71,7 @@ short <- tab %>% filter(!Socio.economic.objectives == "Total") %>%
   #filter(TIME_PERIOD == ourYear) %>%
   left_join(mostRecent, .) %>%
   left_join(., matching) %>%
-  group_by(Reference.area, OBS_VALUE, TIME_PERIOD, new) %>%
+  group_by(Reference.area, TIME_PERIOD, new) %>%
   summarise(sumObs = sum(OBS_VALUE), .groups = "drop") %>%
   left_join(., total) %>%
   mutate(percentTotal = (100 * sumObs) / totalSpent)
@@ -146,7 +146,7 @@ short2 <- tab %>% filter(!Socio.economic.objectives == "Total") %>%
   # filter(TIME_PERIOD == 2023) %>%
   left_join(mostRecent2, .) %>%
   left_join(., matching) %>%
-  group_by(Reference.area, OBS_VALUE, TIME_PERIOD, new) %>%
+  group_by(Reference.area, TIME_PERIOD, new) %>%
   summarise(sumObs = sum(OBS_VALUE), .groups = "drop") %>%
   left_join(., total2) %>%
   mutate(percentTotal = (100 * sumObs) / totalSpent)
